@@ -3,6 +3,7 @@
 //
 
 #pragma once
+#include "afxwin.h"
 
 
 // CGeoDemoApplicationDlg dialog
@@ -32,4 +33,12 @@ protected:
 	DECLARE_MESSAGE_MAP()
 public:
 	afx_msg void OnBnClickedButton1();
+	CStatic imageView1;
+	CStatic imageView2;
+	CStatic imageView3;
+	afx_msg void OnBnClickedButton2();
+	afx_msg void OnBnClickedButton3();
+	afx_msg void OnBnClickedButton4();
+private:
+	void RunMainAlgorithm(CStringA fileName);
 };

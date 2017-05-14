@@ -138,22 +138,31 @@ building
 using namespace cv;
 using namespace std;
 
+#include <map>
 #include <set>
 #include <vector>
 #include <list>
+#include <queue>
+#include <functional>
+//
+//class Segment {
+//	Mat mask;
+//
+//};
 
-class Segment {
-	Mat mask;
-
+struct Result {
+	Mat im1;
+	Mat im2;
+	Mat im3;
 };
 
 namespace LidarChangeDetector {
-	void DoEverything();
+	Result DoEverything(LPCSTR fileName);
 
-	void SegmentImage(Mat input, list<Segment>& segments);
-}
+};
 
 //class LidarChangeDetector {
 //
 //};
+
 

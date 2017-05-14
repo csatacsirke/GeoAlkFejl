@@ -39,6 +39,9 @@
     <ClInclude Include="model\LidarChangeDetector.h">
       <Filter>Model</Filter>
     </ClInclude>
+    <ClInclude Include="model\MathUtil.h">
+      <Filter>Model</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="GeoDemoApplication.cpp">
