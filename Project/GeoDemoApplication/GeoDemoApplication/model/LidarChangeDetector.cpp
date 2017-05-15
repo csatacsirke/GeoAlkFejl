@@ -8,7 +8,8 @@
 
 class LidarChangeDetectorImpl {
 	const float maxSteepness = 8;
-	const size_t minimumBuildingArea = 25;
+	static const size_t minimumBuildingArea = 25;
+	static const int maxHeightDifference = 80;
 
 
 	Result result; 
@@ -42,6 +43,7 @@ public:
 
 
 		Mat difference = Difference(segmentedImage1, segmentedImage2);
+		Mat newBuildings = FindNewBuildings(difference);
 		//CString fileName = CString("segmentation_example.png");
 		//const char* fileName = "segmentation_example.png";
 		//const char* fileName = "b2.png";
@@ -54,7 +56,7 @@ public:
 
 		result.im1 = debug1;
 		result.im2 = debug2;
-		result.im3 = RandomColorIndexedImage(difference);
+		result.im3 = RandomColorIndexedImage(newBuildings);
 
 
 		//imshow(image);
@@ -104,7 +106,7 @@ private:
 
 
 
-		//RemoveTooSmallSegments(segments); 
+		RemoveTooSmallSegments(segments); 
 
 		Mat debug = RandomColorIndexedImage(segments);
 
@@ -276,6 +278,9 @@ private:
 		result.im3 = im_with_keypoints;
 	}
 
+
+
+
 	void FloodFill(Mat indexedImage, Point start, int32_t newIndex) {
 		queue<Point> pointsToProcess;
 		pointsToProcess.push(start);
@@ -301,27 +306,115 @@ private:
 	}
 
 
+
+	struct SegmentInfo {
+		
+		uint8_t min;
+		uint8_t max;
+
+		SegmentInfo() {
+			min = 255;
+			max = 0;
+		}
+
+		SegmentInfo(uint8_t initialValue) {
+			min = initialValue;
+			max = initialValue;
+		}
+
+		void Update(uint8_t newValue) {
+			min = std::min(min, newValue);
+			max = std::max(max, newValue);
+		}
+
+		void Update(const SegmentInfo& other) {
+			min = std::min(min, other.min);
+			max = std::max(max, other.max);
+		}
+
+		int DifferenceFrom(uint8_t value) {
+			if(value < min) return value - min;
+			if(value > max) return max - value;
+			return 0;
+		}
+
+		int GetLevelDifference() {
+			return (max - min);
+		}
+
+		int IsProbablyTerrainSegment() {
+			return GetLevelDifference() > maxHeightDifference;
+		}
+	};
+
+	// visszaadja a legkisebb és legnagyobb pontot is
+	SegmentInfo FloodFillEx(Mat indexedImage, Point start, int32_t newIndex, Mat elevationGrayscale) {
+		queue<Point> pointsToProcess;
+		pointsToProcess.push(start);
+
+		int32_t oldIndex = indexedImage.at<int32_t>(start);
+		
+		SegmentInfo segmentInfo = SegmentInfo(elevationGrayscale.at<uint8_t>(start));
+
+		// hülye vagy
+		assert(oldIndex != newIndex);
+		if(oldIndex == newIndex) return segmentInfo;
+
+		while(!pointsToProcess.empty()) {
+			Point p = pointsToProcess.front();
+			pointsToProcess.pop();
+
+			segmentInfo.Update(elevationGrayscale.at<uint8_t>(p));
+
+			ForEachNeightbour(indexedImage, p, [&](Point neighbour) {
+				int neighbourSegmentIndex = indexedImage.at<int32_t>(neighbour);
+				if(oldIndex == neighbourSegmentIndex) {
+					pointsToProcess.push(neighbour);
+					indexedImage.at<int32_t>(neighbour) = newIndex;
+				}
+			});
+		}
+
+		return segmentInfo;
+	}
+
+	static void EleminateIndex(Mat segments, int32_t indexToDelete) {
+		ForEachPixel(segments, [&](Point p) {
+			int currentSegmentIndex = segments.at<int32_t>(p);
+			if(currentSegmentIndex == indexToDelete) {
+				segments.at<int32_t>(p) = -1;
+			}
+		});
+	}
+
 	void SegmentImage(const Mat image, vector<Point>& seeds, Mat& segments) {
 		segments = Mat(image.rows, image.cols, CV_32S);
 		segments.setTo(0);
 
+		map<int, SegmentInfo> segmentInfo;
 		set<int> terrainSegmentIndices;
+		terrainSegmentIndices.insert(-1);
+		
 
 		queue<Point> pointsToProcess;
 		int currentSegmentIndex = 1;
-		//for(Point& seed : seeds) {
-		//	segments.at<int32_t>(seed) = currentSegmentIndex;
-		//	++currentSegmentIndex;
-		//	pointsToProcess.push(seed);
-		//}
+#ifndef _DEBUG
+		for(Point& seed : seeds) {
+			segments.at<int32_t>(seed) = currentSegmentIndex;
+			++currentSegmentIndex;
+			pointsToProcess.push(seed);
+		}
+#else
 		{ // debug
 			
 			Point p(40, 196);
 			//Point p(196, 40);
 			pointsToProcess.push(p);
 			segments.at<int32_t>(p) = currentSegmentIndex;
+			uint8_t currentHeightValue = image.at<uint8_t>(p);
+			segmentInfo[currentSegmentIndex] = SegmentInfo(currentHeightValue);
 		}
-
+#endif
 
 		while(!pointsToProcess.empty()) {
 			Point p = pointsToProcess.front();
@@ -330,10 +423,20 @@ private:
 			int centerValue = image.at<uint8_t>(p);
 			int currentSegmentIndex = segments.at<int32_t>(p);
 
+			if(0 == currentSegmentIndex) continue;
+			if(-1 == currentSegmentIndex) continue;
+
+			if(segmentInfo[currentSegmentIndex].IsProbablyTerrainSegment()) {
+				EleminateIndex(segments, currentSegmentIndex);
+				continue;
+			}
+
+			segmentInfo[currentSegmentIndex].Update(centerValue);
+
 			ForEachNeightbour(segments, p, [&](Point neighbour) {
 				int neighbourSegmentIndex = segments.at<int32_t>(neighbour);
-
 				if(neighbourSegmentIndex == currentSegmentIndex) return;
+				
 
 				uint8_t neighbourValue = image.at<uint8_t>(neighbour);
 				int levelDifference = centerValue - neighbourValue;
@@ -341,7 +444,9 @@ private:
 
 					// ha valaki már felhasználta egyesitunk
 					if(neighbourSegmentIndex != 0 ) {
-						FloodFill(segments, neighbour, currentSegmentIndex);
+						//FloodFill(segments, neighbour, currentSegmentIndex);
+						SegmentInfo attachedSegmentInfo = FloodFillEx(segments, neighbour, currentSegmentIndex, image);
+						segmentInfo[currentSegmentIndex].Update(attachedSegmentInfo);
 					} else {
 						segments.at<int32_t>(neighbour) = currentSegmentIndex;
 						pointsToProcess.push(neighbour);
@@ -350,7 +455,8 @@ private:
 				} else {
 					// ha a angy szintkülönség miatt a mellettünk levö szegmens
 					// felettünk van akkor mi nyilván nem épület vagyunk
-					if(levelDifference < 0) {
+					int levelDifferenceFromSegmentExtremes = segmentInfo[currentSegmentIndex].DifferenceFrom(neighbourValue);
+					if(levelDifferenceFromSegmentExtremes > 0) {
 						terrainSegmentIndices.insert(currentSegmentIndex);
 					}
 				}
@@ -358,16 +464,77 @@ private:
 			});
 		}
 
+
+		FilterLowGrounds(image, segments);
+
+
 		// ami terrain azt kidobjuk
 		ForEachPixel(segments, [&](Point p) {
 			int currentSegmentIndex = segments.at<int32_t>(p);
 			if(terrainSegmentIndices.find(currentSegmentIndex) != terrainSegmentIndices.end()) {
 				segments.at<int32_t>(p) = 0;
 			}
+
+			if(segmentInfo[currentSegmentIndex].IsProbablyTerrainSegment()) {
+				segments.at<int32_t>(p) = 0;
+			}
 		});
 
-		
+	}
 
+
+	// a 'segments' et tönkreteszi!!
+	bool IsContourHigherThanSegment(Mat elevations, Mat segments, Point start) {
+		int32_t newIndex = 0;
+		queue<Point> pointsToProcess;
+		pointsToProcess.push(start);
+
+		int32_t oldIndex = segments.at<int32_t>(start);
+		uint8_t segmentMinimumElevation = 255;
+		uint8_t contourMaximumElevation = 0;
+
+		// hülye vagy
+		assert(oldIndex != newIndex);
+		if(oldIndex == newIndex) return false;
+
+		while(!pointsToProcess.empty()) {
+			Point p = pointsToProcess.front();
+			pointsToProcess.pop();
+
+			ForEachNeightbour(segments, p, [&](Point neighbour) {
+				int neighbourSegmentIndex = segments.at<int32_t>(neighbour);
+				if(oldIndex == neighbourSegmentIndex) {
+					pointsToProcess.push(neighbour);
+					segments.at<int32_t>(neighbour) = newIndex;
+					uint8_t elevation = elevations.at<uint8_t>(p);
+					segmentMinimumElevation = std::min(segmentMinimumElevation, elevation);
+				} else {
+					// ilyenkor vagyunk kontur pontban
+					uint8_t elevation = elevations.at<uint8_t>(p);
+					contourMaximumElevation = std::max(contourMaximumElevation, elevation);
+				}
+			});
+		}
+		return (contourMaximumElevation > segmentMinimumElevation + maxHeightDifference || segmentMinimumElevation < 128);
+	}
+
+	void FilterLowGrounds(Mat elevations, Mat segments) {
+		set<int> checkedIndices;
+		// a IsContourHigherThanSegment-nak bele kell irnia
+		Mat segements_clone = segments.clone();
+
+		ForEachPixel(segments, [&](Point p) {
+			int currentSegmentIndex = segments.at<int32_t>(p);
+			if(checkedIndices.find(currentSegmentIndex) == checkedIndices.end()) {
+				checkedIndices.insert(currentSegmentIndex);
+
+				if(currentSegmentIndex != 0) {
+					if(IsContourHigherThanSegment(elevations, segements_clone, p)) {
+						FloodFill(segments, p, 0);
+					}
+				}
+			}
+		});
 	}
 
 
@@ -387,6 +554,67 @@ private:
 		});
 
 	}
+
+	enum Relation {
+		None, FirstOnly, SecondOnly, Both
+	};
+
+	static Mat Difference(Mat a, Mat b) {
+		int32_t b_indexOffset = MaxElement(a) + 1;
+		Mat result = a.clone();
+
+		ForEachPixel(a, [&](Point p) {
+			int a_index = a.at<int32_t>(p);
+			int b_index = b.at<int32_t>(p);
+			if(a_index != 0) {
+				if(b_index != 0) {
+					result.at<int32_t>(p) = Relation::Both;
+				} else {
+					result.at<int32_t>(p) = Relation::FirstOnly;
+				}
+			} else {
+				if(b_index != 0) {
+					result.at<int32_t>(p) = Relation::SecondOnly;
+				} else {
+					result.at<int32_t>(p) = Relation::Both;
+				}
+			}
+
+
+
+		});
+
+		return result;
+	}
+
+	Mat FindNewBuildings(Mat differences) {
+		Mat result = differences.clone();
+
+
+		ForEachPixel(result, [&](Point p) {
+			int32_t index = differences.at<int32_t>(p);
+			if(index != Relation::SecondOnly) {
+				result.at<int32_t>(p) = 0;
+			} else {
+				result.at<int32_t>(p) = 1;
+			}
+		});
+
+		int32_t nextIndex = 2;
+		ForEachPixel(result, [&](Point p) {
+			int32_t index = result.at<int32_t>(p);
+			if(index == 1) {
+				FloodFill(result, p, nextIndex);
+				++nextIndex;
+			}
+		});
+
+		RemoveTooSmallSegments(result);
+
+		return result;
+	}
+
+
 
 
 

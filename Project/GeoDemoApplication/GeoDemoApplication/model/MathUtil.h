@@ -174,28 +174,4 @@ static int32_t MaxElement(Mat a) {
 	return maxIndex;
 }
 
-static Mat Difference(Mat a, Mat b) {
-	int32_t b_indexOffset = MaxElement(a) + 1;
-	Mat result = a.clone();
-
-	ForEachPixel(a, [&](Point p) {
-		int a_index = a.at<int32_t>(p);
-		int b_index = b.at<int32_t>(p);
-		if(a_index != 0) {
-			result.at<int32_t>(p) = 1;
-			if(b_index != 0) {
-				result.at<int32_t>(p) = 2;
-			}
-		} else {
-			if(b_index != 0) {
-				result.at<int32_t>(p) = 3;
-			}
-		}
-
-
-
-	});
-
-	return result;
-}
 
