@@ -7,15 +7,13 @@
 
 
 class LidarChangeDetectorImpl {
+	//const float maxSteepness = 4;
 	const float maxSteepness = 8;
 	static const size_t minimumBuildingArea = 25;
 	static const int maxHeightDifference = 80;
 
 
 	Result result; 
-
-	Mat image1;
-	Mat image2;
 
 
 public:
@@ -28,6 +26,9 @@ public:
 		//		TEST.at<Vec3b>(p) = Vec3b(0, 123, 0);
 		//	});
 		//});
+
+		Mat image1;
+		Mat image2;
 
 
 		result = Result();
@@ -59,12 +60,6 @@ public:
 		result.im3 = RandomColorIndexedImage(newBuildings);
 
 
-		//imshow(image);
-		//imshow("im1", image);
-
-
-		
-		//result.im2 = filteredImage;
 		return result;
 	}
 
@@ -92,9 +87,9 @@ private:
 		vector<KeyPoint> keypoints;
 		FindObjects(filteredImage, keypoints);
 
-		Mat debug_keys;
-		cv::drawKeypoints(filteredImage, keypoints, debug_keys);
-		result.im2 = debug_keys;
+		//Mat debug_keys;
+		//cv::drawKeypoints(filteredImage, keypoints, debug_keys);
+		//result.im2 = debug_keys;
 		
 
 		//vector<Point> seeds = ReadSeeds("b2_modded.png");
@@ -135,19 +130,42 @@ private:
 	//	nDSM for each date can be e calculated easily by subtracting this
 	//	DTM from the original DSM.
 	void FilterImage(const Mat image, Mat& filteredImage) {
-		const int kernelSize = 7;
-		double sigma = 1;
+
+
+#if 0
+
+		// a sima gaussos simítás kevés, valami advancedebb kéne, 
+		// http://www.sciencedirect.com/science/article/pii/092427169598236S
+		// erre a cikkre hivatkoznak az eredeti cikkben de nem sikerült elérnem :( 
+		// tudom... konzultálnom kellett volna... sajnálom :(
+		// viszont enélkül is sikerült egész jó eredményeket elérni
+		const int kernelSize = 75;
+		double sigma = kernelSize /6.0;
 
 
 
-		//Mat blurred;
-		//cv::GaussianBlur(image, blurred, Size(kernelSize, kernelSize), sigma);
+		Mat blurred;
+		cv::GaussianBlur(image, blurred, Size(kernelSize, kernelSize), sigma);
+
+		Mat normalizedImage = image - blurred;
+
+		Mat median;		
+		cv::medianBlur(normalizedImage, median, 7);
+		//cv::medianBlur(image, median, 7);
+
+
+		
+
+		result.im1 = image;
+		result.im2 = blurred;
+		result.im3 = normalizedImage;
+#else 
 
 		Mat median;
 		cv::medianBlur(image, median, 7);
-
-
+#endif
 		filteredImage = median;
+		//Abort();
 
 		//cv::blur(image, blurred, cv::Size(5, 5), );
 		//const int kernelSize = 15;
