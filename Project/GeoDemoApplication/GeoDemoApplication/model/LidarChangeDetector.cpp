@@ -6,14 +6,20 @@
 
 
 
-struct LidarChangeDetectorImpl {
+class LidarChangeDetectorImpl {
 	const float maxSteepness = 8;
 	const size_t minimumBuildingArea = 25;
 
-	// nem szép de a debug miatt hasznos, hogy bárki gyorsan bele tudjon irni
+
 	Result result; 
 
-	Result DoEverything(LPCSTR fileName) {
+	Mat image1;
+	Mat image2;
+
+
+public:
+
+	Result DoEverything(LPCSTR fileName1, LPCSTR fileName2) {
 		//Mat TEST = cv::imread("segmentation_example.png");
 		//ForEachPixel(TEST, [&](Point p) {
 		//	TEST.at<Vec3b>(p) = Vec3b(0, 123, 255);
@@ -25,45 +31,30 @@ struct LidarChangeDetectorImpl {
 
 		result = Result();
 
+		image1 = LoadImageAsGrayscale(fileName1);
+		image2 = LoadImageAsGrayscale(fileName2);
+		
+
+
+		Mat segmentedImage2 = ProcessGrayscaleImage(image2);
+		Mat segmentedImage1 = ProcessGrayscaleImage(image1);
+	
+
+
+		Mat difference = Difference(segmentedImage1, segmentedImage2);
 		//CString fileName = CString("segmentation_example.png");
 		//const char* fileName = "segmentation_example.png";
 		//const char* fileName = "b2.png";
-		Mat image_rgb = cv::imread(fileName);
-		const Mat image = ToGray(image_rgb);
-
-		result.im1 = image;
-
 		
-		Mat filteredImage;
+		Mat debug1 = ToRgb(image1);
+		Mat debug2 = ToRgb(image2);
 
+		DrawIndices(debug1, segmentedImage1);
+		DrawIndices(debug2, segmentedImage2);
 
-		FilterImage(image, filteredImage);
-
-		vector<KeyPoint> keypoints;
-		FindObjects(filteredImage, keypoints);
-		//return result;
-		//filteredImage = 
-
-		//list<Segment> segments;
-		//seeds
-		//Mat markers;
-
-		//vector<Point> seeds = ReadSeeds("b2_modded.png");
-		//SegmentImage(filteredImage, seeds);
-		vector<Point> seeds;
-		ExtractPoints(keypoints, seeds);
-		Mat segments;
-		SegmentImage(filteredImage, seeds, segments);
-
-		
-
-		
-		
-		RemoveTooSmallSegments(segments);
-
-		Mat debug = RandomColorIndexedImage(segments);
-		result.im2 = filteredImage;
-		result.im3 = debug;
+		result.im1 = debug1;
+		result.im2 = debug2;
+		result.im3 = RandomColorIndexedImage(difference);
 
 
 		//imshow(image);
@@ -73,6 +64,59 @@ struct LidarChangeDetectorImpl {
 		
 		//result.im2 = filteredImage;
 		return result;
+	}
+
+	Result GetResult() {
+		return result;
+	}
+
+	void Abort() {
+		throw DebugAbort();
+	}
+private:
+
+
+	Mat ProcessGrayscaleImage(Mat image) {
+
+		
+
+
+		result.im1 = image;
+
+
+		Mat filteredImage;
+		FilterImage(image, filteredImage);
+
+		vector<KeyPoint> keypoints;
+		FindObjects(filteredImage, keypoints);
+
+		Mat debug_keys;
+		cv::drawKeypoints(filteredImage, keypoints, debug_keys);
+		result.im2 = debug_keys;
+		
+
+		//vector<Point> seeds = ReadSeeds("b2_modded.png");
+		//SegmentImage(filteredImage, seeds);
+		vector<Point> seeds;
+		ExtractPoints(keypoints, seeds);
+		Mat segments;
+		SegmentImage(filteredImage, seeds, segments);
+
+
+
+		//RemoveTooSmallSegments(segments); 
+
+		Mat debug = RandomColorIndexedImage(segments);
+
+
+
+		//Abort();
+
+		result.im2 = filteredImage;
+		result.im3 = debug;
+
+
+		return segments;
 	}
 
 	
@@ -89,9 +133,19 @@ struct LidarChangeDetectorImpl {
 	//	nDSM for each date can be e calculated easily by subtracting this
 	//	DTM from the original DSM.
 	void FilterImage(const Mat image, Mat& filteredImage) {
-		
+		const int kernelSize = 7;
+		double sigma = 1;
 
-		cv::medianBlur(image, filteredImage, 5);
+
+
+		//Mat blurred;
+		//cv::GaussianBlur(image, blurred, Size(kernelSize, kernelSize), sigma);
+
+		Mat median;
+		cv::medianBlur(image, median, 7);
+
+
+		filteredImage = median;
 
 		//cv::blur(image, blurred, cv::Size(5, 5), );
 		//const int kernelSize = 15;
@@ -166,8 +220,36 @@ struct LidarChangeDetectorImpl {
 	}
 
 
-
 	void FindObjects(Mat image, vector<KeyPoint>& keypoints) {
+		int kernelSize = 7;
+		double sigma = 2;
+		Mat blurred;
+		cv::GaussianBlur(image, blurred, Size(kernelSize, kernelSize), sigma);
+
+		
+		result.im3 = blurred;
+		//Abort();
+
+		ForEachPixel(blurred, [&](Point p) {
+			uint8_t center = blurred.at<uint8_t>(p);
+			bool allOthersAreLower = true;
+			ForEachNeightbour(blurred, p, [&](Point p) {
+				uint8_t neighbour = blurred.at<uint8_t>(p);
+				if(neighbour > center) {
+					allOthersAreLower = false;
+				}
+			});
+			if(allOthersAreLower) {
+				KeyPoint keypoint;
+				keypoint.pt = p;
+				keypoints.push_back(keypoint);
+			}
+		}); 
+
+	}
+
+
+	void FindObjects_2(Mat image, vector<KeyPoint>& keypoints) {
 		cv::SimpleBlobDetector::Params params;
 		params.minThreshold = 0;
 		params.maxThreshold = 255;
@@ -194,6 +276,30 @@ struct LidarChangeDetectorImpl {
 		result.im3 = im_with_keypoints;
 	}
 
+	void FloodFill(Mat indexedImage, Point start, int32_t newIndex) {
+		queue<Point> pointsToProcess;
+		pointsToProcess.push(start);
+
+		int32_t oldIndex = indexedImage.at<int32_t>(start);
+
+		// hülye vagy
+		assert(oldIndex != newIndex);
+		if(oldIndex == newIndex) return;
+
+		while(!pointsToProcess.empty()) {
+			Point p = pointsToProcess.front();
+			pointsToProcess.pop();
+
+			ForEachNeightbour(indexedImage, p, [&](Point neighbour) {
+				int neighbourSegmentIndex = indexedImage.at<int32_t>(neighbour);
+				if(oldIndex == neighbourSegmentIndex) {
+					pointsToProcess.push(neighbour);
+					indexedImage.at<int32_t>(neighbour) = newIndex;
+				}
+			});
+		}
+	}
+
 
 	void SegmentImage(const Mat image, vector<Point>& seeds, Mat& segments) {
 		segments = Mat(image.rows, image.cols, CV_32S);
@@ -203,11 +309,19 @@ struct LidarChangeDetectorImpl {
 
 		queue<Point> pointsToProcess;
 		int currentSegmentIndex = 1;
-		for(Point& seed : seeds) {
-			segments.at<int32_t>(seed) = currentSegmentIndex;
-			++currentSegmentIndex;
-			pointsToProcess.push(seed);
+		//for(Point& seed : seeds) {
+		//	segments.at<int32_t>(seed) = currentSegmentIndex;
+		//	++currentSegmentIndex;
+		//	pointsToProcess.push(seed);
+		//}
+		{ // debug
+			
+			Point p(40, 196);
+			//Point p(196, 40);
+			pointsToProcess.push(p);
+			segments.at<int32_t>(p) = currentSegmentIndex;
 		}
+
 
 		while(!pointsToProcess.empty()) {
 			Point p = pointsToProcess.front();
@@ -218,13 +332,21 @@ struct LidarChangeDetectorImpl {
 
 			ForEachNeightbour(segments, p, [&](Point neighbour) {
 				int neighbourSegmentIndex = segments.at<int32_t>(neighbour);
-				if(neighbourSegmentIndex != 0) return; // ha valaki már felhasználta
+
+				if(neighbourSegmentIndex == currentSegmentIndex) return;
 
 				uint8_t neighbourValue = image.at<uint8_t>(neighbour);
 				int levelDifference = centerValue - neighbourValue;
 				if(abs(levelDifference) < maxSteepness) {
-					segments.at<int32_t>(neighbour) = currentSegmentIndex;
-					pointsToProcess.push(neighbour);
+
+					// ha valaki már felhasználta egyesitunk
+					if(neighbourSegmentIndex != 0 ) {
+						FloodFill(segments, neighbour, currentSegmentIndex);
+					} else {
+						segments.at<int32_t>(neighbour) = currentSegmentIndex;
+						pointsToProcess.push(neighbour);
+					}
+
 				} else {
 					// ha a angy szintkülönség miatt a mellettünk levö szegmens
 					// felettünk van akkor mi nyilván nem épület vagyunk
@@ -267,62 +389,17 @@ struct LidarChangeDetectorImpl {
 	}
 
 
-	//void SegmentImage(Mat difference, list<Segment>& segments) {
-
-	//	cv::SimpleBlobDetector::Params params;
-	//	params.minThreshold = 10;
-	//	params.maxThreshold = 180;
-	//	params.thresholdStep = 10;
-
-	//	
-
-
-
-	//	params.filterByArea = false;
-	//	//params.filterByArea = false;
-	//	params.maxArea = 1000000;
-	//	params.minArea = 100;
-	//	//params.maxArea = 30 * 30;
-	//	//params.minArea = 3 * 3;
-
-
-
-	//	auto detector = cv::SimpleBlobDetector::create(params);
-
-	//	// Detect blobs.
-	//	std::vector<KeyPoint> keypoints;
-	//	//cv::SimpleBlobDetector detector;
-	//	//detector->detect(image, keypoints);
-	//	detector->detect(difference, keypoints);
-	//	//detector.detect(difference, keypoints);
-
-	//	// Draw detected blobs as red circles.
-	//	// DrawMatchesFlags::DRAW_RICH_KEYPOINTS flag ensures the size of the circle corresponds to the size of blob
-	//	Mat im_with_keypoints;
-	//	drawKeypoints(difference, keypoints, im_with_keypoints, Scalar(255, 255, 255), DrawMatchesFlags::DRAW_RICH_KEYPOINTS);
-
-
-	//	//im_with_keypoints.convertTo(im_with_keypoints, CV_8U);
-	//	im_with_keypoints = ToGray(im_with_keypoints);
-
-	//	//Mat markers(markerMask.size(), CV_32S);
-	//	//markers = Scalar::all(0);
-
-
-
-	//	
-
-
-	//	result.im2 = difference;
-	//	result.im3 = im_with_keypoints;
-
-	//}
-
 
 };
 
-Result LidarChangeDetector::DoEverything(LPCSTR fileName) {
+Result LidarChangeDetector::DoEverything(LPCSTR fileName1, LPCSTR fileName2) {
 	LidarChangeDetectorImpl detector;
-	return detector.DoEverything(fileName);
+	try {
+		detector.DoEverything(fileName1, fileName2);
+	} catch(DebugAbort) {
+
+	}
+	
+	return detector.GetResult();
 }
 

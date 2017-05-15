@@ -31,3 +31,6 @@ _ReSharper*/
 #Nuget packages folder
 packages/
 *.ipch
+Project/GeoDemoApplication/GeoDemoApplication.VC.db
+Project/GeoDemoApplication/GeoDemoApplication.VC.VC.opendb
+Project/GeoDemoApplication/GeoDemoApplication.VC.db

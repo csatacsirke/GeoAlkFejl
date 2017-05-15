@@ -156,8 +156,10 @@ struct Result {
 	Mat im3;
 };
 
+typedef std::exception DebugAbort;
+
 namespace LidarChangeDetector {
-	Result DoEverything(LPCSTR fileName);
+	Result DoEverything(LPCSTR fileName1, LPCSTR fileName2);
 
 };
 

@@ -149,7 +149,7 @@ void DisplayImage(CStatic& wnd, Mat image) {
 
 void CGeoDemoApplicationDlg::OnBnClickedButton1() {
 	
-	RunMainAlgorithm("b2.png");
+	RunMainAlgorithm("b1.png", "b2.png");
 	//CImage im1;
 	//MatToCImage(result.im1, im1);
 
@@ -167,21 +167,21 @@ void CGeoDemoApplicationDlg::OnBnClickedButton1() {
 
 
 void CGeoDemoApplicationDlg::OnBnClickedButton2() {
-	RunMainAlgorithm("a1.png");
+	RunMainAlgorithm("a1.png", "a2.png");
 }
 
 
 void CGeoDemoApplicationDlg::OnBnClickedButton3() {
-	RunMainAlgorithm("b1.png");
+	RunMainAlgorithm("b1.png", "b2.png");
 }
 
 
 void CGeoDemoApplicationDlg::OnBnClickedButton4() {
-	RunMainAlgorithm("c1.png");
+	RunMainAlgorithm("c1.png", "c2.png");
 }
 
-void CGeoDemoApplicationDlg::RunMainAlgorithm(CStringA fileName) {
-	Result result = LidarChangeDetector::DoEverything(fileName);
+void CGeoDemoApplicationDlg::RunMainAlgorithm(CStringA fileName1, CStringA fileName2) {
+	Result result = LidarChangeDetector::DoEverything(fileName1, fileName2);
 
 	DisplayImage(imageView1, result.im1);
 	DisplayImage(imageView2, result.im2);

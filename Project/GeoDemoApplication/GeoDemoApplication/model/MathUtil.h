@@ -24,7 +24,6 @@ static Mat ToGray(Mat rgbImage) {
 }
 
 
-
 static void ForEachPixel(Mat image, function<void(int, int)> fn) {
 	const int width = image.cols;
 	const int height = image.rows;
@@ -99,7 +98,7 @@ static Mat RandomColorIndexedImage(Mat image) {
 
 	ForEachPixel(hsvImage, [&](Point p) {
 		int32_t index = image.at<int32_t>(p);
-		Vec3f hsv = (index != 0) ? Vec3f(17.7f * float(index), 1, 1) : Vec3f(0, 0, 0.5f);
+		Vec3f hsv = (index != 0) ? Vec3f(83.7f * float(index-1), 1, 1) : Vec3f(0, 0, 0.5f);
 		hsvImage.at<Vec3f>(p) = hsv;
 	});
 
@@ -133,6 +132,70 @@ static vector<Point> ReadSeeds(const char* fileName) {
 }
 
 
+static Mat LoadImageAsGrayscale(LPCSTR fileName) {
+	Mat rgbImage = cv::imread(fileName);
+	Mat image = ToGray(rgbImage);
+	return image;
+}
 
 
+static Mat ToRgb(Mat grayscale) {
+	// grayscale.convertTo(rgbImage, CV_8UC3); // ez valamiért szar
+
+	Mat rgbImage(grayscale.rows, grayscale.cols, CV_8UC3);
+	ForEachPixel(rgbImage, [&](Point p) {
+		uint8_t grayValue = grayscale.at<uint8_t>(p);
+		rgbImage.at<Vec3b>(p) = Vec3b(grayValue, grayValue, grayValue);
+	});
+
+	return rgbImage;
+}
+
+
+static void DrawIndices(Mat background, Mat indexed) {
+	Vec3b maskColor = Vec3b(128, 255, 0);
+	const float alpha = 0.5f;
+
+	ForEachPixel(background, [&](Point p) {
+		Vec3b rgb = background.at<Vec3b>(p);
+		int32_t index = indexed.at<int32_t>(p);
+		if(index != 0) {
+			background.at<Vec3b>(p) = maskColor*alpha + rgb*(1 - alpha);
+		}
+	});
+}
+
+static int32_t MaxElement(Mat a) {
+	int32_t maxIndex = 0;
+	ForEachPixel(a, [&](Point p) {
+		int32_t index = a.at<int32_t>(p);
+		maxIndex = std::max(index, maxIndex);
+	});
+	return maxIndex;
+}
+
+static Mat Difference(Mat a, Mat b) {
+	int32_t b_indexOffset = MaxElement(a) + 1;
+	Mat result = a.clone();
+
+	ForEachPixel(a, [&](Point p) {
+		int a_index = a.at<int32_t>(p);
+		int b_index = b.at<int32_t>(p);
+		if(a_index != 0) {
+			result.at<int32_t>(p) = 1;
+			if(b_index != 0) {
+				result.at<int32_t>(p) = 2;
+			}
+		} else {
+			if(b_index != 0) {
+				result.at<int32_t>(p) = 3;
+			}
+		}
+
+
+
+	});
+
+	return result;
+}
 
