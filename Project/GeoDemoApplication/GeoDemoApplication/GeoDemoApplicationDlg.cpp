@@ -30,6 +30,8 @@ void CGeoDemoApplicationDlg::DoDataExchange(CDataExchange* pDX)
 	DDX_Control(pDX, IDC_IMAGEVIEW_1, imageView1);
 	DDX_Control(pDX, IDC_IMAGEVIEW_2, imageView2);
 	DDX_Control(pDX, IDC_IMAGEVIEW_3, imageView3);
+	DDX_Control(pDX, IDC_EDIT1, fileEdit1);
+	DDX_Control(pDX, IDC_EDIT2, fileEdit2);
 }
 
 BEGIN_MESSAGE_MAP(CGeoDemoApplicationDlg, CDialogEx)
@@ -39,6 +41,8 @@ BEGIN_MESSAGE_MAP(CGeoDemoApplicationDlg, CDialogEx)
 	ON_BN_CLICKED(IDC_BUTTON2, &CGeoDemoApplicationDlg::OnBnClickedButton2)
 	ON_BN_CLICKED(IDC_BUTTON3, &CGeoDemoApplicationDlg::OnBnClickedButton3)
 	ON_BN_CLICKED(IDC_BUTTON4, &CGeoDemoApplicationDlg::OnBnClickedButton4)
+	ON_BN_CLICKED(IDC_BUTTON5, &CGeoDemoApplicationDlg::OnBnClickedButton5)
+	ON_BN_CLICKED(IDC_BUTTON6, &CGeoDemoApplicationDlg::OnBnClickedButton6)
 END_MESSAGE_MAP()
 
 
@@ -56,7 +60,7 @@ BOOL CGeoDemoApplicationDlg::OnInitDialog()
 	// TODO: Add extra initialization here
 
 	//LidarChangeDetector::DoEverything
-	OnBnClickedButton1();
+	//OnBnClickedButton1();
 
 	return TRUE;  // return TRUE  unless you set the focus to a control
 }
@@ -149,7 +153,20 @@ void DisplayImage(CStatic& wnd, Mat image) {
 
 void CGeoDemoApplicationDlg::OnBnClickedButton1() {
 	
-	RunMainAlgorithm("b1.png", "b2.png");
+	try {
+		CString fileName1;
+		CString fileName2;
+		fileEdit1.GetWindowText(fileName1);
+		fileEdit2.GetWindowText(fileName2);
+
+		CStringA fileName1_ansi1(fileName1);
+		CStringA fileName1_ansi2(fileName2);
+		
+		RunMainAlgorithm(fileName1_ansi1, fileName1_ansi2);
+	} catch(...) {
+		MessageBox(_T("Unexpected error"));
+	}
+	
 	//CImage im1;
 	//MatToCImage(result.im1, im1);
 
@@ -186,4 +203,24 @@ void CGeoDemoApplicationDlg::RunMainAlgorithm(CStringA fileName1, CStringA fileN
 	DisplayImage(imageView1, result.im1);
 	DisplayImage(imageView2, result.im2);
 	DisplayImage(imageView3, result.im3);
+}
+
+
+void CGeoDemoApplicationDlg::OnBnClickedButton5() {
+	CFileDialog dlg(TRUE);
+	auto result = dlg.DoModal();
+	if(result == IDOK) {
+		CString fileName = dlg.GetPathName();
+		fileEdit1.SetWindowText(fileName);
+	}
+}
+
+
+void CGeoDemoApplicationDlg::OnBnClickedButton6() {
+	CFileDialog dlg(TRUE);
+	auto result = dlg.DoModal();
+	if(result == IDOK) {
+		CString fileName = dlg.GetPathName();
+		fileEdit2.SetWindowText(fileName);
+	}
 }

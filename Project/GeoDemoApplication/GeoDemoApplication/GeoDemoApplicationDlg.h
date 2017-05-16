@@ -41,4 +41,9 @@ public:
 	afx_msg void OnBnClickedButton4();
 private:
 	void RunMainAlgorithm(CStringA fileName1, CStringA fileName2);
+public:
+	CEdit fileEdit1;
+	CEdit fileEdit2;
+	afx_msg void OnBnClickedButton5();
+	afx_msg void OnBnClickedButton6();
 };

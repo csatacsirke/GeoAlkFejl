@@ -43,8 +43,8 @@ public:
 	
 
 
-		Mat difference = Difference(segmentedImage1, segmentedImage2);
-		Mat newBuildings = FindNewBuildings(difference);
+		//Mat difference = Difference();
+		Mat newBuildings = FindNewBuildings(segmentedImage1, segmentedImage2);
 		//CString fileName = CString("segmentation_example.png");
 		//const char* fileName = "segmentation_example.png";
 		//const char* fileName = "b2.png";
@@ -54,9 +54,13 @@ public:
 
 		DrawIndices(debug1, segmentedImage1);
 		DrawIndices(debug2, segmentedImage2);
-
+#if 1
 		result.im1 = debug1;
 		result.im2 = debug2;
+#else 
+		result.im1 = image1;
+		result.im2 = image2;
+#endif
 		result.im3 = RandomColorIndexedImage(newBuildings);
 
 
@@ -98,6 +102,7 @@ private:
 		ExtractPoints(keypoints, seeds);
 		Mat segments;
 		SegmentImage(filteredImage, seeds, segments);
+		
 
 
 
@@ -107,7 +112,7 @@ private:
 
 
 
-		//Abort();
+		
 
 		result.im2 = filteredImage;
 		result.im3 = debug;
@@ -165,7 +170,7 @@ private:
 		cv::medianBlur(image, median, 7);
 #endif
 		filteredImage = median;
-		//Abort();
+		
 
 		//cv::blur(image, blurred, cv::Size(5, 5), );
 		//const int kernelSize = 15;
@@ -248,7 +253,7 @@ private:
 
 		
 		result.im3 = blurred;
-		//Abort();
+		
 
 		ForEachPixel(blurred, [&](Point p) {
 			uint8_t center = blurred.at<uint8_t>(p);
@@ -329,6 +334,7 @@ private:
 		
 		uint8_t min;
 		uint8_t max;
+		size_t numberOfPixels = 0;
 
 		SegmentInfo() {
 			min = 255;
@@ -338,16 +344,19 @@ private:
 		SegmentInfo(uint8_t initialValue) {
 			min = initialValue;
 			max = initialValue;
+			++numberOfPixels;
 		}
 
 		void Update(uint8_t newValue) {
 			min = std::min(min, newValue);
 			max = std::max(max, newValue);
+			++numberOfPixels;
 		}
 
 		void Update(const SegmentInfo& other) {
 			min = std::min(min, other.min);
 			max = std::max(max, other.max);
+			numberOfPixels += other.numberOfPixels;
 		}
 
 		int DifferenceFrom(uint8_t value) {
@@ -416,7 +425,8 @@ private:
 
 		queue<Point> pointsToProcess;
 		int currentSegmentIndex = 1;
-#ifndef _DEBUG
+#define EGYPONT 0
+#if !EGYPONT
 		for(Point& seed : seeds) {
 			segments.at<int32_t>(seed) = currentSegmentIndex;
 			++currentSegmentIndex;
@@ -425,7 +435,8 @@ private:
 #else
 		{ // debug
 			
-			Point p(40, 196);
+			Point p(215, 103);
+			//Point p(40, 196);
 			//Point p(196, 40);
 			pointsToProcess.push(p);
 			segments.at<int32_t>(p) = currentSegmentIndex;
@@ -594,7 +605,7 @@ private:
 				if(b_index != 0) {
 					result.at<int32_t>(p) = Relation::SecondOnly;
 				} else {
-					result.at<int32_t>(p) = Relation::Both;
+					result.at<int32_t>(p) = Relation::None;
 				}
 			}
 
@@ -605,31 +616,202 @@ private:
 		return result;
 	}
 
-	Mat FindNewBuildings(Mat differences) {
-		Mat result = differences.clone();
+	struct RelationInfo {
+		size_t firstCount = 0;
+		size_t secondCount = 0;
+		size_t totalCount = 0;
+		size_t bothCount = 0;
 
+		int32_t index1_d = -1;
+		int32_t index2_d = -1;
 
-		ForEachPixel(result, [&](Point p) {
-			int32_t index = differences.at<int32_t>(p);
-			if(index != Relation::SecondOnly) {
-				result.at<int32_t>(p) = 0;
-			} else {
-				result.at<int32_t>(p) = 1;
+		void Update(int32_t index1, int32_t index2) {
+			if(index1 == -1)index1 = 0;
+			if(index2 == -1)index2 = 0;
+
+			//debug
+			if(index1_d < 0) index1_d = index1;
+			if(index2_d < 0) index2_d = index2;
+
+			if(index1 != index1_d || index2 != index2_d) {
+				::MessageBoxA(0, "ASD", 0, 0);
 			}
+
+
+			if(index1 != 0) {
+				++firstCount;
+			}
+			if(index2 != 0) {
+				++secondCount;
+			}
+
+			if(index1 != 0 && index2 != 0) {
+				++bothCount;
+			}
+			
+			if(index1 != 0 || index2 != 0) {
+				++totalCount;
+			}
+		}
+		
+
+		bool Overlaps() {
+			if(firstCount == 0 || secondCount == 0 || totalCount == 0 || index1_d == 0 || index2_d == 0) {
+				return false;
+			}
+			const double minCoverage = 0.75;
+			if(double(bothCount) / double(totalCount) > minCoverage) {
+				return true;
+			}
+			return false;
+		}
+
+	};
+
+	//RelationInfo FindRelations(Mat indexedImage, Point start, int32_t newIndex) {
+	//	queue<Point> pointsToProcess;
+	//	pointsToProcess.push(start);
+
+	//	int32_t oldIndex = indexedImage.at<int32_t>(start);
+
+	//	RelationInfo segmentInfo;
+
+	//	// hülye vagy
+	//	assert(oldIndex != newIndex);
+	//	if(oldIndex == newIndex) return segmentInfo;
+
+	//	while(!pointsToProcess.empty()) {
+	//		Point p = pointsToProcess.front();
+	//		pointsToProcess.pop();
+
+	//		int32_t index = indexedImage.at<int32_t>(p);
+
+	//		segmentInfo.Update(elevationGrayscale.at<uint8_t>(p));
+
+	//		ForEachNeightbour(indexedImage, p, [&](Point neighbour) {
+	//			int neighbourSegmentIndex = indexedImage.at<int32_t>(neighbour);
+	//			if(neighbourSegmentIndex != ) {
+	//				pointsToProcess.push(neighbour);
+	//				indexedImage.at<int32_t>(neighbour) = newIndex;
+	//			}
+	//		});
+	//	}
+
+	//	return segmentInfo;
+	//}
+
+
+
+
+	Mat FindNewBuildings(Mat segmentedImage1, Mat segmentedImage2) {
+		Mat differences = Difference(segmentedImage1, segmentedImage2);
+
+		//map<int32_t, map<int32_t, RelationInfo>> relations;
+		map<int32_t, map<int32_t, size_t>> overlappingPixels;
+		map<int32_t, size_t> segmentSize1;
+		map<int32_t, size_t> segmentSize2;
+
+
+		ForEachPixel(segmentedImage1, [&](Point p) {
+			int32_t index1 = segmentedImage1.at<int32_t>(p);
+			int32_t index2 = segmentedImage2.at<int32_t>(p);
+
+			overlappingPixels[index1][index2] += 1;
+			segmentSize1[index1] += 1;
+			segmentSize2[index2] += 1;
+			
 		});
 
-		int32_t nextIndex = 2;
-		ForEachPixel(result, [&](Point p) {
-			int32_t index = result.at<int32_t>(p);
-			if(index == 1) {
-				FloodFill(result, p, nextIndex);
-				++nextIndex;
+
+		ForEachPixel(segmentedImage1, [&](Point p) {
+			int32_t index1 = segmentedImage1.at<int32_t>(p);
+			int32_t index2 = segmentedImage2.at<int32_t>(p);
+
+			//std::swap(index1, index2);
+			// TODO ezt lehetne preprocesszálni
+			for(auto& pair : overlappingPixels) {
+#define swap 0
+#if swap
+				int32_t it2 = pair.first;
+#else
+				int32_t it1 = pair.first;
+#endif
+				for(auto& relation : pair.second) {
+#if swap
+					int32_t it1 = relation.first;
+#else 
+					int32_t it2 = relation.first;
+#endif
+
+					if(it1 == 0 || it2 == 0) continue;
+
+
+					const double minCoverage = 0.75; 
+					if(index1 != 0) {
+						size_t over = overlappingPixels[index1][it2];
+						size_t total = segmentSize1[index1] + segmentSize2[it2] - overlappingPixels[index1][it2];
+
+						if(over == total || double(over) / double(total) > minCoverage) {
+							differences.at<int32_t>(p) = Relation::Both;
+						}
+
+					}
+
+					if(index2 != 0){
+						size_t over = overlappingPixels[it1][index2];
+						size_t total = segmentSize1[it1] + segmentSize2[index2] - overlappingPixels[it1][index2];
+						//if(double() / double(segmentSize1[index1] + segmentSize2[index2] - overlappingPixels[it1][index2]) > minCoverage) {
+						if(over == total || double(over) / double(total) > minCoverage) {
+							differences.at<int32_t>(p) = Relation::Both;
+						}
+					}
+					
+					
+
+					//if(relations[index1][it2].Overlaps()) {
+					//	differences.at<int32_t>(p) = Relation::Both;
+					//}
+
+					//if(relations[it1][index2].Overlaps()) {
+					//	differences.at<int32_t>(p) = Relation::Both;
+					//}
+				}
 			}
+
+			//if(relations[index1][index2].Overlaps()) {
+			//	differences.at<int32_t>(p) = Relation::Both;
+			//}
 		});
 
-		RemoveTooSmallSegments(result);
+		
 
-		return result;
+
+
+		//Mat result = differences.clone();
+		//RemoveTooSmallSegments(differences);
+		return differences;
+
+		//ForEachPixel(result, [&](Point p) {
+		//	int32_t index = differences.at<int32_t>(p);
+		//	if(index != Relation::SecondOnly) {
+		//		result.at<int32_t>(p) = 0;
+		//	} else {
+		//		result.at<int32_t>(p) = 1;
+		//	}
+		//});
+
+		//int32_t nextIndex = 5;
+		//ForEachPixel(differences, [&](Point p) {
+		//	int32_t index = differences.at<int32_t>(p);
+		//	if(index == 1) {
+		//		FloodFill(differences, p, nextIndex);
+		//		++nextIndex;
+		//	}
+		//});
+
+		//RemoveTooSmallSegments(result);
+
+		//return result;
 	}
 
 
