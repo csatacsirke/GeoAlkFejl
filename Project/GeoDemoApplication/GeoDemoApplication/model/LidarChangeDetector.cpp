@@ -44,7 +44,7 @@ public:
 
 
 		//Mat difference = Difference();
-		Mat newBuildings = FindNewBuildings(segmentedImage1, segmentedImage2);
+		Mat newBuildings = FindDifferences(segmentedImage1, segmentedImage2);
 		//CString fileName = CString("segmentation_example.png");
 		//const char* fileName = "segmentation_example.png";
 		//const char* fileName = "b2.png";
@@ -54,7 +54,7 @@ public:
 
 		DrawIndices(debug1, segmentedImage1);
 		DrawIndices(debug2, segmentedImage2);
-#if 1
+#if 0
 		result.im1 = debug1;
 		result.im2 = debug2;
 #else 
@@ -703,7 +703,7 @@ private:
 
 
 
-	Mat FindNewBuildings(Mat segmentedImage1, Mat segmentedImage2) {
+	Mat FindDifferences(Mat segmentedImage1, Mat segmentedImage2) {
 		Mat differences = Difference(segmentedImage1, segmentedImage2);
 
 		//map<int32_t, map<int32_t, RelationInfo>> relations;
